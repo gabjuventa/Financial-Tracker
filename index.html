@@ -130,29 +130,7 @@ const DEFAULT_DATA = {
   wealthKeywords: ["Bibit", "Reksadana", "Saham", "Emas", "Dompet"],
   wealthAdjustments: [],
   wealthInstrumentBase: {},
-  seedApplied: false,
 };
-const SEED_VERSION = 5;
-const SEED_WEALTH_KEYWORDS = ["Bibit", "Reksadana", "Saham", "Emas", "Dompet", "Stockbit", "Gotrade"];
-const SEED_WEALTH_VALUES = { Bibit: 502000, Emas: 2090815, Stockbit: 736102, Gotrade: 10427614 };
-const SEED_TRANSACTIONS = [
-  { id: 'seed1', date: '2026-08-24', amount: 50057, type: 'expense', account: 'DANA', category: 'Investment', note: 'emas' },
-  { id: 'seed3', date: '2026-08-24', amount: 186000, type: 'expense', account: 'DANA', category: 'Bills', note: 'Netflix' },
-  { id: 'seed4', date: '2026-08-24', amount: 29000, type: 'expense', account: 'DANA', category: 'Dining', note: 'Bfast' },
-  { id: 'seed5', date: '2026-08-24', amount: 80000, type: 'expense', account: 'DANA', category: 'Bills', note: 'Paket Tsel' },
-  { id: 'seed6', date: '2026-08-24', amount: 400000, type: 'income', account: 'DANA', category: 'Transfer', note: 'Transfer from BCA', transferId: 'seedxfer1' },
-  { id: 'seed7', date: '2026-08-24', amount: 400000, type: 'expense', account: 'BCA', category: 'Transfer', note: 'Top Up DANA', transferId: 'seedxfer1' },
-  { id: 'seed9', date: '2026-08-24', amount: 500000, type: 'expense', account: 'BCA', category: 'Investment', note: 'Top Up RDN' },
-  { id: 'seed10', date: '2026-08-24', amount: 381460, type: 'expense', account: 'Shopeepay', category: 'Bills', note: 'Paylater' },
-  { id: 'seed11', date: '2026-08-24', amount: 500000, type: 'income', account: 'Shopeepay', category: 'Transfer', note: 'Transfer from BCA', transferId: 'seedxfer2' },
-  { id: 'seed12', date: '2026-08-24', amount: 500000, type: 'expense', account: 'BCA', category: 'Transfer', note: 'Top Up Shopeepay', transferId: 'seedxfer2' },
-  { id: 'seed13', date: '2026-08-24', amount: 7800000, type: 'expense', account: 'BCA', category: 'Bills', note: 'KPR' },
-  { id: 'seed14', date: '2026-08-24', amount: 1050000, type: 'expense', account: 'BCA', category: 'Bills', note: 'Allianz' },
-  { id: 'seed15', date: '2026-08-24', amount: 41900, type: 'expense', account: 'BCA', category: 'Dining', note: 'Jajan sore' },
-  { id: 'seed16', date: '2026-08-24', amount: 53000, type: 'expense', account: 'BCA', category: 'Dining', note: 'Maksi' },
-  { id: 'seed17', date: '2026-08-24', amount: 400000, type: 'income', account: 'DANA', category: 'Salary', note: 'Payroll' },
-  { id: 'seed18', date: '2026-08-24', amount: 11137711, type: 'income', account: 'BCA', category: 'Salary', note: 'Payroll 2' },
-];
 const PALETTE = ["#99C3EC", "#F69C9E", "#97E3C2", "#F0B429", "#BCECE6", "#AAD2EC"];
 const ACCOUNT_COLORS = { bca: "#003399", superbank: "#DE5252", jago: "#00AB66", shopeepay: "#EE4D2D", dana: "#108EE9" };
 
@@ -217,25 +195,9 @@ function rangeDays(period) {
 function loadData() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    let d = raw ? { ...DEFAULT_DATA, ...JSON.parse(raw) } : { ...DEFAULT_DATA };
-    if ((d.seedVersion || 0) < SEED_VERSION) {
-      d.transactions = SEED_TRANSACTIONS;
-      d.categories = Array.from(new Set([...(d.categories || []), "Investment", "Transfer"]));
-      d.wealthKeywords = SEED_WEALTH_KEYWORDS;
-      const base = { ...(d.wealthInstrumentBase || {}) };
-      Object.keys(SEED_WEALTH_VALUES).forEach((k) => {
-        const net = d.transactions.filter((t) => matchKeyword(t, [k]) === k).reduce((s, t) => s + t.amount, 0);
-        base[k] = SEED_WEALTH_VALUES[k] - net;
-      });
-      d.wealthInstrumentBase = base;
-      d.seedVersion = SEED_VERSION;
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch (e) {}
-    }
-    return d;
+    if (raw) return { ...DEFAULT_DATA, ...JSON.parse(raw) };
   } catch (e) {}
-  const net = (k) => SEED_TRANSACTIONS.filter((t) => matchKeyword(t, [k]) === k).reduce((s, t) => s + t.amount, 0);
-  const base = {}; Object.keys(SEED_WEALTH_VALUES).forEach((k) => (base[k] = SEED_WEALTH_VALUES[k] - net(k)));
-  return { ...DEFAULT_DATA, transactions: SEED_TRANSACTIONS, wealthKeywords: SEED_WEALTH_KEYWORDS, wealthInstrumentBase: base, seedVersion: SEED_VERSION };
+  return { ...DEFAULT_DATA };
 }
 let data = loadData();
 let ui = { tab: "dashboard", monthOffset: 0, txPage: 0, chartPeriod: "weekly", cashoutOpen: false, wealthAddOpen: false, quickAddOpen: false, dailyBudgetEditing: false, toast: "", maskNumbers: false, editingTxId: null };
@@ -335,11 +297,11 @@ async function loadCloudData() {
       data = { ...DEFAULT_DATA, ...row.data };
       try { localStorage.setItem(STORAGE_KEY + "-cache-" + authUser.id, JSON.stringify(data)); } catch (e) {}
     } else {
-      // First time this account has no cloud data yet.
-      // Only pull leftover localStorage data as a one-time migration — and only
-      // if it hasn't already been claimed by another account on this device.
+      // First time this account has no cloud data yet. Only pull real leftover
+      // localStorage data as a one-time migration, and only if it hasn't already
+      // been claimed by another account on this device.
       const alreadyClaimed = localStorage.getItem(STORAGE_KEY + "-claimed");
-      data = alreadyClaimed ? { ...DEFAULT_DATA, seedVersion: SEED_VERSION } : loadData();
+      data = alreadyClaimed ? { ...DEFAULT_DATA } : loadData();
       try { localStorage.setItem(STORAGE_KEY + "-claimed", "1"); localStorage.removeItem(STORAGE_KEY); } catch (e) {}
       await sb.from("app_data").upsert({ user_id: authUser.id, email: authUser.email, data, updated_at: new Date().toISOString() });
     }
@@ -347,8 +309,8 @@ async function loadCloudData() {
     console.error(e);
     try {
       const cached = localStorage.getItem(STORAGE_KEY + "-cache-" + authUser.id);
-      data = cached ? { ...DEFAULT_DATA, ...JSON.parse(cached) } : { ...DEFAULT_DATA, seedVersion: SEED_VERSION };
-    } catch (e2) { data = { ...DEFAULT_DATA, seedVersion: SEED_VERSION }; }
+      data = cached ? { ...DEFAULT_DATA, ...JSON.parse(cached) } : { ...DEFAULT_DATA };
+    } catch (e2) { data = { ...DEFAULT_DATA }; }
     showToast("Could not reach cloud — using last saved copy");
   }
   render();
