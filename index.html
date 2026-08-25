@@ -247,6 +247,8 @@ let authUser = null;
 let authView = "login";
 let authError = "";
 let authBusy = false;
+let authEmailVal = "", authPwVal = "", authPw2Val = "";
+let pwShow = false, pw2Show = false;
 
 function renderAuth() {
   document.getElementById("app").innerHTML = `
@@ -261,23 +263,53 @@ function renderAuth() {
         ${authError ? `<div style="font-size:12px;color:var(--danger);background:#FCEEEF;padding:8px 12px;border-radius:10px;margin-bottom:12px">${esc(authError)}</div>` : ""}
         <form onsubmit="submitAuth(event)">
           <div style="display:flex;flex-direction:column;gap:12px">
-            <div class="field">Email<input type="email" id="auth-email" required placeholder="you@example.com"></div>
-            <div class="field">Password<input type="password" id="auth-password" required placeholder="${authView === "signup" ? "min 6 characters" : "••••••••"}"></div>
+            <div class="field">Email<input type="email" id="auth-email" required placeholder="you@example.com" value="${esc(authEmailVal)}" oninput="authEmailVal=this.value"></div>
+            <div class="field">Password
+              <div style="position:relative">
+                <input type="${pwShow ? "text" : "password"}" id="auth-password" required placeholder="${authView === "signup" ? "min 6 characters" : "••••••••"}" value="${esc(authPwVal)}" oninput="authPwVal=this.value; checkPwMatch()" style="padding-right:36px">
+                <button type="button" class="btn-ghost" onclick="pwShow=!pwShow; renderAuth()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:2px;color:var(--text-soft)">${pwShow ? ICON.eyeOff : ICON.eye}</button>
+              </div>
+            </div>
+            ${authView === "signup" ? `
+            <div class="field">Confirm password
+              <div style="position:relative">
+                <input type="${pw2Show ? "text" : "password"}" id="auth-password2" required placeholder="repeat password" value="${esc(authPw2Val)}" oninput="authPw2Val=this.value; checkPwMatch()" style="padding-right:36px">
+                <button type="button" class="btn-ghost" onclick="pw2Show=!pw2Show; renderAuth()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:2px;color:var(--text-soft)">${pw2Show ? ICON.eyeOff : ICON.eye}</button>
+              </div>
+              <div id="pw-match-msg" style="font-size:11px;margin-top:2px"></div>
+            </div>` : ""}
           </div>
-          <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:18px" ${authBusy ? "disabled" : ""}>${authBusy ? "Please wait…" : authView === "login" ? "Log in" : "Sign up"}</button>
+          <button type="submit" class="btn btn-primary" id="auth-submit-btn" style="width:100%;justify-content:center;margin-top:18px" ${authBusy ? "disabled" : ""}>${authBusy ? "Please wait…" : authView === "login" ? "Log in" : "Sign up"}</button>
         </form>
         <div style="text-align:center;margin-top:14px;font-size:12px;color:var(--text-soft)">
-          ${authView === "login" ? `Don't have an account? <a href="#" onclick="event.preventDefault(); authView='signup'; authError=''; renderAuth()" style="color:var(--primary-dark);font-weight:500">Sign up</a>`
-                                  : `Already have an account? <a href="#" onclick="event.preventDefault(); authView='login'; authError=''; renderAuth()" style="color:var(--primary-dark);font-weight:500">Log in</a>`}
+          ${authView === "login" ? `Don't have an account? <a href="#" onclick="event.preventDefault(); authView='signup'; authError=''; authPwVal=''; authPw2Val=''; renderAuth()" style="color:var(--primary-dark);font-weight:500">Sign up</a>`
+                                  : `Already have an account? <a href="#" onclick="event.preventDefault(); authView='login'; authError=''; authPwVal=''; authPw2Val=''; renderAuth()" style="color:var(--primary-dark);font-weight:500">Log in</a>`}
         </div>
       </div>
     </div>
   `;
 }
+function checkPwMatch() {
+  const p1 = document.getElementById("auth-password");
+  const p2 = document.getElementById("auth-password2");
+  const msg = document.getElementById("pw-match-msg");
+  const btn = document.getElementById("auth-submit-btn");
+  if (!p1 || !p2 || !msg) return;
+  if (p2.value === "") { msg.textContent = ""; p2.style.borderColor = "var(--border)"; if (btn) btn.disabled = false; return; }
+  const matches = p1.value === p2.value;
+  msg.textContent = matches ? "✓ Passwords match" : "✕ Passwords don't match";
+  msg.style.color = matches ? "var(--success)" : "var(--danger)";
+  p2.style.borderColor = matches ? "var(--success)" : "var(--danger)";
+  if (btn) btn.disabled = !matches;
+}
 async function submitAuth(e) {
   e.preventDefault();
   const email = document.getElementById("auth-email").value.trim();
   const password = document.getElementById("auth-password").value;
+  if (authView === "signup") {
+    const password2 = document.getElementById("auth-password2").value;
+    if (password !== password2) { authError = "Passwords don't match — please re-check both fields."; renderAuth(); return; }
+  }
   authError = ""; authBusy = true; renderAuth();
   const fn = authView === "login" ? sb.auth.signInWithPassword({ email, password }) : sb.auth.signUp({ email, password });
   const { data: res, error } = await fn;
@@ -285,14 +317,14 @@ async function submitAuth(e) {
   if (error) { authError = error.message; renderAuth(); return; }
   if (authView === "signup" && res && !res.session) {
     authError = "Account created — check your email to confirm, then log in.";
-    authView = "login"; renderAuth(); return;
+    authView = "login"; authPwVal = ""; authPw2Val = ""; renderAuth(); return;
   }
   // onAuthStateChange will pick up the new session and load cloud data
 }
 async function logout() {
   await sb.auth.signOut();
   try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
-  authUser = null; data = null; authView = "login"; authError = ""; renderAuth();
+  authUser = null; data = null; authView = "login"; authError = ""; authEmailVal = ""; authPwVal = ""; authPw2Val = ""; renderAuth();
 }
 async function loadCloudData() {
   document.getElementById("app").innerHTML = `<div style="width:100%;min-height:100vh;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px">Loading your data…</div>`;
