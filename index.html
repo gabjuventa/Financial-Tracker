@@ -238,7 +238,7 @@ function loadData() {
   return { ...DEFAULT_DATA, transactions: SEED_TRANSACTIONS, wealthKeywords: SEED_WEALTH_KEYWORDS, wealthInstrumentBase: base, seedVersion: SEED_VERSION };
 }
 let data = loadData();
-let ui = { tab: "dashboard", monthOffset: 0, txPage: 0, chartPeriod: "weekly", cashoutOpen: false, wealthAddOpen: false, quickAddOpen: false, dailyBudgetEditing: false, csvParsed: null, toast: "", maskNumbers: false, editingTxId: null };
+let ui = { tab: "dashboard", monthOffset: 0, txPage: 0, chartPeriod: "weekly", cashoutOpen: false, wealthAddOpen: false, quickAddOpen: false, dailyBudgetEditing: false, toast: "", maskNumbers: false, editingTxId: null };
 
 const SUPABASE_URL = "https://rdlrokbxtvosxfqeoqcq.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkbHJva2J4dHZvc3hmcWVvcWNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2NDYwODcsImV4cCI6MjEwMzIyMjA4N30.UwMLgEU8wbSjKGRDyIw_hSAMXZU8jKwIJR_Pe8mH4As";
@@ -365,7 +365,6 @@ function render() {
   const NAV = [
     { id: "dashboard", label: "Financial Tracker", icon: ICON.dashboard },
     { id: "wealth", label: "Wealth", icon: ICON.wealth },
-    { id: "import", label: "Import", icon: ICON.upload },
     { id: "settings", label: "Accounts", icon: ICON.settings },
   ];
   const navHtml = NAV.map((n) => `<button class="navicon ${ui.tab === n.id ? "active" : ""}" title="${n.label}" onclick="setUi({tab:'${n.id}'})">${n.icon}</button>`).join("");
@@ -373,7 +372,6 @@ function render() {
   let body = "";
   if (ui.tab === "dashboard") body = renderDashboard();
   else if (ui.tab === "wealth") body = renderWealth();
-  else if (ui.tab === "import") body = renderImport();
   else if (ui.tab === "settings") body = renderSettings();
 
   document.getElementById("app").innerHTML = `
@@ -771,72 +769,6 @@ function submitQuickAdd(e) {
 }
 
 /* ============ Import ============ */
-function renderImport() {
-  return `
-    <h1 class="page-title">Import</h1>
-    <p class="page-sub">Bring transactions in from a CSV export.</p>
-    ${renderCsvImport()}
-  `;
-}
-
-function renderCsvImport() {
-  const p = ui.csvParsed;
-  if (!p) {
-    return `
-      <label class="dropzone" style="margin-top:16px">
-        <div style="font-size:22px">⬆</div>
-        <span style="font-size:14px;font-weight:500">Click to choose a CSV file</span>
-        <span style="font-size:12px">exported from your bank or e-wallet</span>
-        <input type="file" accept=".csv" style="display:none" onchange="handleCsvFile(event)">
-      </label>`;
-  }
-  return `
-    <div style="margin-top:16px">
-      <div style="font-size:14px;color:var(--text-soft);margin-bottom:12px"><b style="color:var(--text)">${esc(p.fileName)}</b> — ${p.rows.length} rows found</div>
-      <div class="card grid-2" style="gap:12px">
-        <div class="field">Date column<select id="csv-date">${p.headers.map((h) => `<option ${h === p.dateCol ? "selected" : ""}>${esc(h)}</option>`).join("")}</select></div>
-        <div class="field">Amount column<select id="csv-amount">${p.headers.map((h) => `<option ${h === p.amountCol ? "selected" : ""}>${esc(h)}</option>`).join("")}</select></div>
-        <div class="field">Description column<select id="csv-desc">${p.headers.map((h) => `<option ${h === p.descCol ? "selected" : ""}>${esc(h)}</option>`).join("")}</select></div>
-        <div class="field">This is which account?<select id="csv-account">${data.accounts.map((a) => `<option>${esc(a)}</option>`).join("")}</select></div>
-        <div class="field">Default category<select id="csv-category"><option>Uncategorized</option>${data.categories.map((c) => `<option>${esc(c)}</option>`).join("")}</select></div>
-        <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:500;color:var(--text-soft);margin-top:20px"><input type="checkbox" id="csv-flip"> Flip sign (charges show as positive numbers)</label>
-      </div>
-      <div class="card" style="margin-top:16px;padding:0;overflow:hidden">
-        <div style="padding:10px 20px;font-size:12px;font-weight:600;background:var(--surface);color:var(--text-soft)">PREVIEW (first 5 rows)</div>
-        ${p.rows.slice(0, 5).map((r) => `<div style="display:flex;gap:16px;padding:8px 20px;font-size:12px;border-top:1px solid var(--border)"><span>${esc(r[p.dateCol])}</span><span style="flex:1">${esc(r[p.descCol] || "")}</span><span>${esc(r[p.amountCol])}</span></div>`).join("")}
-      </div>
-      <div style="display:flex;gap:12px;margin-top:16px">
-        <button class="btn btn-primary" onclick="doCsvImport()">Import ${p.rows.length} transactions</button>
-        <button class="btn btn-outline" onclick="setUi({csvParsed:null})">Cancel</button>
-      </div>
-    </div>
-    <div style="margin-top:24px;display:flex;gap:8px;font-size:12px;padding:12px;border-radius:12px;background:var(--primary-soft);color:var(--primary-dark)">
-      ⚠ Check the preview before importing — "Flip sign" fixes cards/wallets that export spending as positive numbers.
-    </div>
-  `;
-}
-function handleCsvFile(e) {
-  const file = e.target.files[0]; if (!file) return;
-  Papa.parse(file, { header: true, skipEmptyLines: true, complete: (res) => {
-    const cols = res.meta.fields || [];
-    const guess = (keys) => cols.find((c) => keys.some((k) => c.toLowerCase().includes(k)));
-    ui.csvParsed = { fileName: file.name, headers: cols, rows: res.data,
-      dateCol: guess(["date"]) || cols[0] || "", descCol: guess(["desc", "memo", "narrative", "detail"]) || cols[1] || "", amountCol: guess(["amount", "value", "debit", "credit"]) || cols[2] || "" };
-    render();
-  }, error: () => showToast("Could not read that file") });
-}
-function doCsvImport() {
-  const p = ui.csvParsed;
-  const dateCol = document.getElementById("csv-date").value, amountCol = document.getElementById("csv-amount").value, descCol = document.getElementById("csv-desc").value;
-  const account = document.getElementById("csv-account").value, category = document.getElementById("csv-category").value, flip = document.getElementById("csv-flip").checked;
-  const imported = p.rows.map((r) => {
-    let amt = parseFloat(String(r[amountCol]).replace(/[^0-9.-]/g, "")); if (isNaN(amt)) return null;
-    if (flip) amt = -amt;
-    return { id: uid(), date: r[dateCol] || todayStr(), amount: Math.abs(amt), type: amt < 0 ? "expense" : "income", account, category, note: descCol ? r[descCol] : "" };
-  }).filter(Boolean);
-  data.transactions = [...imported, ...data.transactions]; save();
-  showToast(`Imported ${imported.length} transactions`); ui.csvParsed = null; render();
-}
 
 
 /* ============ Accounts & Categories ============ */
