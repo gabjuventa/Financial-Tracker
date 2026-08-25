@@ -292,6 +292,7 @@ async function submitAuth(e) {
 }
 async function logout() {
   await sb.auth.signOut();
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
   authUser = null; data = null; authView = "login"; authError = ""; renderAuth();
 }
 async function loadCloudData() {
@@ -301,14 +302,23 @@ async function loadCloudData() {
     if (error) throw error;
     if (row && row.data && Object.keys(row.data).length) {
       data = { ...DEFAULT_DATA, ...row.data };
+      try { localStorage.setItem(STORAGE_KEY + "-cache-" + authUser.id, JSON.stringify(data)); } catch (e) {}
     } else {
-      data = loadData();
+      // First time this account has no cloud data yet.
+      // Only pull leftover localStorage data as a one-time migration — and only
+      // if it hasn't already been claimed by another account on this device.
+      const alreadyClaimed = localStorage.getItem(STORAGE_KEY + "-claimed");
+      data = alreadyClaimed ? { ...DEFAULT_DATA, seedVersion: SEED_VERSION } : loadData();
+      try { localStorage.setItem(STORAGE_KEY + "-claimed", "1"); localStorage.removeItem(STORAGE_KEY); } catch (e) {}
       await sb.from("app_data").upsert({ user_id: authUser.id, data, updated_at: new Date().toISOString() });
     }
   } catch (e) {
     console.error(e);
-    data = loadData();
-    showToast("Could not reach cloud — using local data");
+    try {
+      const cached = localStorage.getItem(STORAGE_KEY + "-cache-" + authUser.id);
+      data = cached ? { ...DEFAULT_DATA, ...JSON.parse(cached) } : { ...DEFAULT_DATA, seedVersion: SEED_VERSION };
+    } catch (e2) { data = { ...DEFAULT_DATA, seedVersion: SEED_VERSION }; }
+    showToast("Could not reach cloud — using last saved copy");
   }
   render();
 }
@@ -327,7 +337,7 @@ async function initApp() {
 }
 
 function save() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) { showToast("Could not save — storage full?"); }
+  try { localStorage.setItem(STORAGE_KEY + "-cache-" + (authUser ? authUser.id : "anon"), JSON.stringify(data)); } catch (e) { showToast("Could not save — storage full?"); }
   if (authUser) {
     sb.from("app_data").upsert({ user_id: authUser.id, data, updated_at: new Date().toISOString() })
       .then(({ error }) => { if (error) { console.error(error); showToast("Cloud sync failed"); } });
