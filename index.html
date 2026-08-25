@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ledger — Personal Finance</title>
+<title>FinPulse — Track your financial heartbeat</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
   :root {
@@ -25,13 +26,13 @@
     --danger-soft: #F69C9E;
   }
   * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; }
+  html, body { height: 100%; margin: 0; overflow-x: hidden; }
   body { font-family: 'Inter', sans-serif; background: var(--page-bg); color: var(--text); }
   input, select, button { font-family: 'Inter', sans-serif; font-size: 14px; }
   button { border: none; background: none; appearance: none; -webkit-appearance: none; cursor: pointer; box-shadow: none; }
   ::placeholder { color: #B4B2C6; }
   .num { font-variant-numeric: tabular-nums; }
-  #app { display: flex; min-height: 100vh; width: 100%; }
+  #app { display: flex; min-height: 100vh; width: 100%; overflow-x: hidden; }
 
   /* Sidebar */
   .sidebar { width: 84px; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding: 24px 0; gap: 8px; flex-shrink: 0; }
@@ -40,20 +41,21 @@
   .navicon.active { background: var(--primary); color: var(--text); }
 
   /* Main */
-  #main { flex: 1; padding: 32px 40px; width: 100%; min-width: 0; }
+  #main { flex: 1; padding: 32px 40px; width: 100%; min-width: 0; overflow-x: hidden; }
   h1.page-title { font-size: 26px; font-weight: 700; color: var(--text-on-bg); margin: 0 0 4px; }
   p.page-sub { font-size: 14px; color: var(--text-soft-on-bg); margin: 0 0 24px; }
 
-  .card { background: var(--card); border-radius: 20px; box-shadow: 0 1px 2px rgba(32,28,51,.04), 0 8px 24px -12px rgba(32,28,51,.08); padding: 24px; }
-  .grid-dash { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; align-items: start; }
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-  .col { display: flex; flex-direction: column; gap: 20px; }
+  .card { background: var(--card); border-radius: 20px; box-shadow: 0 1px 2px rgba(32,28,51,.04), 0 8px 24px -12px rgba(32,28,51,.08); padding: 24px; min-width: 0; max-width: 100%; }
+  .grid-dash { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; align-items: start; min-width: 0; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; min-width: 0; }
+  .col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
   @media (max-width: 900px) { .grid-dash, .grid-2 { grid-template-columns: 1fr; } }
   @media (max-width: 640px) {
     #app { flex-direction: column; }
     .sidebar { flex-direction: row; width: 100%; height: auto; padding: 10px 14px; justify-content: flex-start; gap: 10px; border-right: none; border-bottom: 1px solid var(--border); overflow-x: auto; }
     .logo { margin-bottom: 0; flex-shrink: 0; }
     .navicon { flex-shrink: 0; }
+    .navicon[title="Log out"] { margin-top: 0 !important; margin-left: auto; }
     #main { padding: 16px; }
     h1.page-title { font-size: 20px; }
     .card { padding: 16px; border-radius: 16px; }
@@ -80,8 +82,9 @@
   .btn-surface { background: var(--surface); color: var(--primary-dark); font-size: 12px; padding: 6px 12px; }
   .btn:disabled { opacity: .4; cursor: not-allowed; }
 
-  .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 500; color: var(--text-soft); }
-  .field input, .field select { padding: 9px 12px; border-radius: 12px; border: 1px solid var(--border); font-size: 14px; color: var(--text); width: 100%; }
+  .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 500; color: var(--text-soft); min-width: 0; }
+  .field input, .field select { padding: 9px 12px; border-radius: 12px; border: 1px solid var(--border); font-size: 14px; color: var(--text); width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
+  .field input[type="date"] { appearance: none; -webkit-appearance: none; }
   .row-between { display: flex; align-items: center; justify-content: space-between; }
   .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; padding: 6px 12px; border-radius: 999px; background: var(--surface); color: var(--text); }
   .chip button { border: none; background: transparent; color: var(--text-soft); cursor: pointer; font-size: 12px; }
@@ -94,9 +97,15 @@
   .toast { position: fixed; bottom: 24px; right: 24px; background: var(--text); color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.2); z-index: 50; }
   .badge { font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 999px; }
   .dropzone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 56px 16px; border: 2px dashed var(--border); border-radius: 20px; color: var(--text-soft); cursor: pointer; text-align: center; }
-  .bar-scroll { overflow-x: auto; }
+  .bar-scroll { overflow-x: auto; width: 100%; max-width: 100%; -webkit-overflow-scrolling: touch; }
   .bar-scroll::-webkit-scrollbar { height: 5px; }
   .bar-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .tx-scroll { display: flex; gap: 10px; overflow-x: auto; width: 100%; max-width: 100%; padding-bottom: 4px; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
+  .tx-scroll::-webkit-scrollbar { height: 5px; }
+  .tx-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .tx-card { flex: 0 0 220px; border: 1px solid var(--border); border-radius: 14px; padding: 12px; scroll-snap-align: start; }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(3,4,94,.45); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+  .modal-box { background: var(--card); border-radius: 20px; padding: 24px; width: 100%; max-width: 380px; max-height: 90vh; overflow-y: auto; }
   .bar-col { position: relative; cursor: pointer; }
   .bar-tip { display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 10px; background: #1F2937; color: #fff; border-radius: 12px; padding: 10px 14px; font-size: 12px; white-space: nowrap; box-shadow: 0 10px 24px rgba(0,0,0,.35); z-index: 30; }
   .bar-tip .tip-title { font-weight: 600; margin-bottom: 6px; color: #fff; }
@@ -113,7 +122,7 @@ const STORAGE_KEY = "ledger-finance-data";
 const DEFAULT_DATA = {
   transactions: [],
   accounts: ["BCA", "Superbank", "Jago", "Shopeepay", "DANA", "OVO"],
-  categories: ["Groceries", "Dining", "Transport", "Bills", "Shopping", "Salary", "Other"],
+  categories: ["Groceries", "Dining", "Transport", "Bills", "Shopping", "Salary", "Other", "Investment"],
   currency: "Rp",
   viewPeriod: "monthly",
   dailyBudget: "",
@@ -122,11 +131,35 @@ const DEFAULT_DATA = {
   wealthAdjustments: [],
   wealthInstrumentBase: {},
   apiKey: "",
+  seedApplied: false,
 };
+const SEED_VERSION = 5;
+const SEED_WEALTH_KEYWORDS = ["Bibit", "Reksadana", "Saham", "Emas", "Dompet", "Stockbit", "Gotrade"];
+const SEED_WEALTH_VALUES = { Bibit: 502000, Emas: 2090815, Stockbit: 736102, Gotrade: 10427614 };
+const SEED_TRANSACTIONS = [
+  { id: 'seed1', date: '2026-08-24', amount: 50057, type: 'expense', account: 'DANA', category: 'Investment', note: 'emas' },
+  { id: 'seed3', date: '2026-08-24', amount: 186000, type: 'expense', account: 'DANA', category: 'Bills', note: 'Netflix' },
+  { id: 'seed4', date: '2026-08-24', amount: 29000, type: 'expense', account: 'DANA', category: 'Dining', note: 'Bfast' },
+  { id: 'seed5', date: '2026-08-24', amount: 80000, type: 'expense', account: 'DANA', category: 'Bills', note: 'Paket Tsel' },
+  { id: 'seed6', date: '2026-08-24', amount: 400000, type: 'income', account: 'DANA', category: 'Transfer', note: 'Transfer from BCA', transferId: 'seedxfer1' },
+  { id: 'seed7', date: '2026-08-24', amount: 400000, type: 'expense', account: 'BCA', category: 'Transfer', note: 'Top Up DANA', transferId: 'seedxfer1' },
+  { id: 'seed9', date: '2026-08-24', amount: 500000, type: 'expense', account: 'BCA', category: 'Investment', note: 'Top Up RDN' },
+  { id: 'seed10', date: '2026-08-24', amount: 381460, type: 'expense', account: 'Shopeepay', category: 'Bills', note: 'Paylater' },
+  { id: 'seed11', date: '2026-08-24', amount: 500000, type: 'income', account: 'Shopeepay', category: 'Transfer', note: 'Transfer from BCA', transferId: 'seedxfer2' },
+  { id: 'seed12', date: '2026-08-24', amount: 500000, type: 'expense', account: 'BCA', category: 'Transfer', note: 'Top Up Shopeepay', transferId: 'seedxfer2' },
+  { id: 'seed13', date: '2026-08-24', amount: 7800000, type: 'expense', account: 'BCA', category: 'Bills', note: 'KPR' },
+  { id: 'seed14', date: '2026-08-24', amount: 1050000, type: 'expense', account: 'BCA', category: 'Bills', note: 'Allianz' },
+  { id: 'seed15', date: '2026-08-24', amount: 41900, type: 'expense', account: 'BCA', category: 'Dining', note: 'Jajan sore' },
+  { id: 'seed16', date: '2026-08-24', amount: 53000, type: 'expense', account: 'BCA', category: 'Dining', note: 'Maksi' },
+  { id: 'seed17', date: '2026-08-24', amount: 400000, type: 'income', account: 'DANA', category: 'Salary', note: 'Payroll' },
+  { id: 'seed18', date: '2026-08-24', amount: 11137711, type: 'income', account: 'BCA', category: 'Salary', note: 'Payroll 2' },
+];
 const PALETTE = ["#99C3EC", "#F69C9E", "#97E3C2", "#F0B429", "#BCECE6", "#AAD2EC"];
 const ACCOUNT_COLORS = { bca: "#003399", superbank: "#DE5252", jago: "#00AB66", shopeepay: "#EE4D2D", dana: "#108EE9" };
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+function formatAmountInput(el) { const digits = el.value.replace(/[^\d]/g, ""); el.value = digits ? Number(digits).toLocaleString("id-ID") : ""; }
+function parseAmountInput(str) { return parseFloat(String(str || "").replace(/[^\d]/g, "")) || 0; }
 function fmtNum(n) { const sign = n < 0 ? "-" : ""; return sign + Math.abs(Math.round(n)).toLocaleString("id-ID"); }
 function cur(n) { return ui.maskNumbers ? data.currency + " • • • • •" : data.currency + fmtNum(n); }
 function fmtDate(dateStr) { const [y, m, d] = String(dateStr).split("-").map(Number); if (!y || !m || !d) return dateStr; return d + " " + new Date(y, m - 1, d).toLocaleString(undefined, { month: "short" }); }
@@ -151,8 +184,9 @@ function instrumentBase(keyword) { return parseFloat((data.wealthInstrumentBase 
 function instrumentValue(keyword) { return instrumentBase(keyword) + keywordNet(keyword); }
 function mondayOf(d) { const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(d.getFullYear(), d.getMonth(), diff); }
 
+function offsetDayStr(n) { const d = new Date(); d.setDate(d.getDate() + n); return toStr(d); }
 function getRange(period, monthOffset) {
-  if (period === "daily") return { start: todayStr(), end: todayStr() };
+  if (period === "daily") { const s = offsetDayStr(monthOffset); return { start: s, end: s }; }
   if (period === "weekly") { const mon = mondayOf(new Date()); const sun = new Date(mon); sun.setDate(mon.getDate() + 6); return { start: toStr(mon), end: toStr(sun) }; }
   const now = new Date();
   const first = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
@@ -160,7 +194,7 @@ function getRange(period, monthOffset) {
   return { start: toStr(first), end: toStr(last) };
 }
 function getPrevRange(period, monthOffset) {
-  if (period === "daily") return { start: daysAgoStr(1), end: daysAgoStr(1) };
+  if (period === "daily") { const s = offsetDayStr(monthOffset - 1); return { start: s, end: s }; }
   if (period === "weekly") { const mon = mondayOf(new Date()); const pMon = new Date(mon); pMon.setDate(mon.getDate() - 7); const pSun = new Date(mon); pSun.setDate(mon.getDate() - 1); return { start: toStr(pMon), end: toStr(pSun) }; }
   const now = new Date();
   const first = new Date(now.getFullYear(), now.getMonth() + monthOffset - 1, 1);
@@ -182,13 +216,123 @@ function rangeDays(period) {
 
 /* ============ State ============ */
 function loadData() {
-  try { const raw = localStorage.getItem(STORAGE_KEY); if (raw) return { ...DEFAULT_DATA, ...JSON.parse(raw) }; } catch (e) {}
-  return { ...DEFAULT_DATA };
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    let d = raw ? { ...DEFAULT_DATA, ...JSON.parse(raw) } : { ...DEFAULT_DATA };
+    if ((d.seedVersion || 0) < SEED_VERSION) {
+      d.transactions = SEED_TRANSACTIONS;
+      d.categories = Array.from(new Set([...(d.categories || []), "Investment", "Transfer"]));
+      d.wealthKeywords = SEED_WEALTH_KEYWORDS;
+      const base = { ...(d.wealthInstrumentBase || {}) };
+      Object.keys(SEED_WEALTH_VALUES).forEach((k) => {
+        const net = d.transactions.filter((t) => matchKeyword(t, [k]) === k).reduce((s, t) => s + t.amount, 0);
+        base[k] = SEED_WEALTH_VALUES[k] - net;
+      });
+      d.wealthInstrumentBase = base;
+      d.seedVersion = SEED_VERSION;
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch (e) {}
+    }
+    return d;
+  } catch (e) {}
+  const net = (k) => SEED_TRANSACTIONS.filter((t) => matchKeyword(t, [k]) === k).reduce((s, t) => s + t.amount, 0);
+  const base = {}; Object.keys(SEED_WEALTH_VALUES).forEach((k) => (base[k] = SEED_WEALTH_VALUES[k] - net(k)));
+  return { ...DEFAULT_DATA, transactions: SEED_TRANSACTIONS, wealthKeywords: SEED_WEALTH_KEYWORDS, wealthInstrumentBase: base, seedVersion: SEED_VERSION };
 }
 let data = loadData();
-let ui = { tab: "dashboard", monthOffset: 0, chartPeriod: "weekly", cashoutOpen: false, wealthAddOpen: false, quickAddOpen: false, dailyBudgetEditing: false, importMode: "csv", csvParsed: null, screenshotState: "idle", screenshotParsed: null, toast: "", maskNumbers: false };
+let ui = { tab: "dashboard", monthOffset: 0, txPage: 0, chartPeriod: "weekly", cashoutOpen: false, wealthAddOpen: false, quickAddOpen: false, dailyBudgetEditing: false, importMode: "csv", csvParsed: null, screenshotState: "idle", screenshotParsed: null, toast: "", maskNumbers: false, editingTxId: null };
 
-function save() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) { showToast("Could not save — storage full?"); } }
+const SUPABASE_URL = "https://rdlrokbxtvosxfqeoqcq.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkbHJva2J4dHZvc3hmcWVvcWNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2NDYwODcsImV4cCI6MjEwMzIyMjA4N30.UwMLgEU8wbSjKGRDyIw_hSAMXZU8jKwIJR_Pe8mH4As";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let authUser = null;
+let authView = "login";
+let authError = "";
+let authBusy = false;
+
+function renderAuth() {
+  document.getElementById("app").innerHTML = `
+    <div style="width:100%;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px">
+      <div class="card" style="width:100%;max-width:380px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:2px">
+          <div class="logo" style="margin-bottom:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l1.8-5 3 10 2.4-13 2.4 8h6.4"/></svg></div>
+          <h1 style="font-size:18px;font-weight:700;margin:0">FinPulse</h1>
+        </div>
+        <p style="font-size:12px;color:var(--text-soft);margin:0 0 20px">Track your financial heartbeat.</p>
+        <h2 style="font-size:15px;font-weight:600;margin:0 0 16px">${authView === "login" ? "Log in" : "Create an account"}</h2>
+        ${authError ? `<div style="font-size:12px;color:var(--danger);background:#FCEEEF;padding:8px 12px;border-radius:10px;margin-bottom:12px">${esc(authError)}</div>` : ""}
+        <form onsubmit="submitAuth(event)">
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div class="field">Email<input type="email" id="auth-email" required placeholder="you@example.com"></div>
+            <div class="field">Password<input type="password" id="auth-password" required placeholder="${authView === "signup" ? "min 6 characters" : "••••••••"}"></div>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:18px" ${authBusy ? "disabled" : ""}>${authBusy ? "Please wait…" : authView === "login" ? "Log in" : "Sign up"}</button>
+        </form>
+        <div style="text-align:center;margin-top:14px;font-size:12px;color:var(--text-soft)">
+          ${authView === "login" ? `Don't have an account? <a href="#" onclick="event.preventDefault(); authView='signup'; authError=''; renderAuth()" style="color:var(--primary-dark);font-weight:500">Sign up</a>`
+                                  : `Already have an account? <a href="#" onclick="event.preventDefault(); authView='login'; authError=''; renderAuth()" style="color:var(--primary-dark);font-weight:500">Log in</a>`}
+        </div>
+      </div>
+    </div>
+  `;
+}
+async function submitAuth(e) {
+  e.preventDefault();
+  const email = document.getElementById("auth-email").value.trim();
+  const password = document.getElementById("auth-password").value;
+  authError = ""; authBusy = true; renderAuth();
+  const fn = authView === "login" ? sb.auth.signInWithPassword({ email, password }) : sb.auth.signUp({ email, password });
+  const { data: res, error } = await fn;
+  authBusy = false;
+  if (error) { authError = error.message; renderAuth(); return; }
+  if (authView === "signup" && res && !res.session) {
+    authError = "Account created — check your email to confirm, then log in.";
+    authView = "login"; renderAuth(); return;
+  }
+  // onAuthStateChange will pick up the new session and load cloud data
+}
+async function logout() {
+  await sb.auth.signOut();
+  authUser = null; data = null; authView = "login"; authError = ""; renderAuth();
+}
+async function loadCloudData() {
+  document.getElementById("app").innerHTML = `<div style="width:100%;min-height:100vh;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px">Loading your data…</div>`;
+  try {
+    const { data: row, error } = await sb.from("app_data").select("data").eq("user_id", authUser.id).maybeSingle();
+    if (error) throw error;
+    if (row && row.data && Object.keys(row.data).length) {
+      data = { ...DEFAULT_DATA, ...row.data };
+    } else {
+      data = loadData();
+      await sb.from("app_data").upsert({ user_id: authUser.id, data, updated_at: new Date().toISOString() });
+    }
+  } catch (e) {
+    console.error(e);
+    data = loadData();
+    showToast("Could not reach cloud — using local data");
+  }
+  render();
+}
+async function initApp() {
+  const { data: sessionData } = await sb.auth.getSession();
+  authUser = sessionData.session ? sessionData.session.user : null;
+  sb.auth.onAuthStateChange((event, session) => {
+    const newUser = session ? session.user : null;
+    const changed = (newUser && newUser.id) !== (authUser && authUser.id);
+    authUser = newUser;
+    if (authUser && changed) loadCloudData();
+    else if (!authUser) { data = null; authView = "login"; renderAuth(); }
+  });
+  if (authUser) await loadCloudData();
+  else renderAuth();
+}
+
+function save() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) { showToast("Could not save — storage full?"); }
+  if (authUser) {
+    sb.from("app_data").upsert({ user_id: authUser.id, data, updated_at: new Date().toISOString() })
+      .then(({ error }) => { if (error) { console.error(error); showToast("Cloud sync failed"); } });
+  }
+}
 function persist(patch) { data = { ...data, ...patch }; save(); render(); }
 function setUi(patch) { ui = { ...ui, ...patch }; render(); }
 function showToast(msg) { ui.toast = msg; render(); clearTimeout(window.__toastT); window.__toastT = setTimeout(() => { ui.toast = ""; render(); }, 2400); }
@@ -203,6 +347,8 @@ const ICON = {
   eye: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>',
   eyeOff: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/><line x1="3" y1="3" x2="21" y2="21"/></svg>',
   x: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>',
+  edit: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>',
+  logout: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
 };
 
 /* ============ Render root ============ */
@@ -223,8 +369,9 @@ function render() {
 
   document.getElementById("app").innerHTML = `
     <div class="sidebar">
-      <div class="logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="var(--text)"><path d="M12 2l4 10-4 10-4-10z"/></svg></div>
+      <div class="logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l1.8-5 3 10 2.4-13 2.4 8h6.4"/></svg></div>
       ${navHtml}
+      <button class="navicon" title="Log out" style="margin-top:auto;color:#B4B2C6" onclick="logout()">${ICON.logout}</button>
     </div>
     <div id="main">${body}</div>
     ${ui.toast ? `<div class="toast">✓ ${esc(ui.toast)}</div>` : ""}
@@ -238,11 +385,13 @@ function renderDashboard() {
   const prev = getPrevRange(period, ui.monthOffset);
   const rangeTx = data.transactions.filter((t) => t.date >= start && t.date <= end);
   const prevTx = data.transactions.filter((t) => t.date >= prev.start && t.date <= prev.end);
+  const realRangeTx = rangeTx.filter((t) => t.category !== "Transfer");
+  const realPrevTx = prevTx.filter((t) => t.category !== "Transfer");
 
-  const income = sumBy(rangeTx, "income");
-  const expense = sumBy(rangeTx, "expense");
+  const income = sumBy(realRangeTx, "income");
+  const expense = sumBy(realRangeTx, "expense");
   const net = income - expense;
-  const prevNet = sumBy(prevTx, "income") - sumBy(prevTx, "expense");
+  const prevNet = sumBy(realPrevTx, "income") - sumBy(realPrevTx, "expense");
   const netDelta = net - prevNet;
 
   const byAccount = {};
@@ -253,7 +402,7 @@ function renderDashboard() {
   const positiveSum = positiveAccounts.reduce((s, a) => s + byAccount[a], 0) || 1;
 
   const byCategory = {};
-  rangeTx.filter((t) => t.type === "expense").forEach((t) => (byCategory[t.category] = (byCategory[t.category] || 0) + t.amount));
+  realRangeTx.filter((t) => t.type === "expense").forEach((t) => (byCategory[t.category] = (byCategory[t.category] || 0) + t.amount));
   const catRows = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
   const catTotal = catRows.reduce((s, [, v]) => s + v, 0) || 1;
 
@@ -261,19 +410,24 @@ function renderDashboard() {
   { const startD = new Date(start), endD = new Date(end);
     for (let d = new Date(startD); d <= endD; d.setDate(d.getDate() + 1)) {
       const dateStr = toStr(d);
-      const dayTx = data.transactions.filter((t) => t.date === dateStr);
+      const dayTx = data.transactions.filter((t) => t.date === dateStr && t.category !== "Transfer");
       const label = period === "monthly" ? String(d.getDate()) : d.toLocaleDateString(undefined, { weekday: "short" });
       bars.push({ date: dateStr, income: sumBy(dayTx, "income"), expense: sumBy(dayTx, "expense"), label });
     }
   }
   const maxBar = Math.max(...bars.map((b) => Math.max(b.income, b.expense)), 1);
   const monthDate = new Date(new Date().getFullYear(), new Date().getMonth() + ui.monthOffset, 1);
-  const periodLabel = period === "daily" ? "Today" : period === "weekly" ? "This week (Mon–Sun)" : monthDate.toLocaleString(undefined, { month: "long", year: "numeric" });
-  const recent = [...rangeTx].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8);
+  const periodLabel = period === "daily"
+    ? (ui.monthOffset === 0 ? "Today" : ui.monthOffset === -1 ? "Yesterday" : (() => { const [y, m, d] = start.split("-").map(Number); return new Date(y, m - 1, d).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric" }); })())
+    : period === "weekly" ? "This week (Mon–Sun)" : monthDate.toLocaleString(undefined, { month: "long", year: "numeric" });
+  const sortedTx = [...rangeTx].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const txTotalPages = Math.max(1, Math.ceil(sortedTx.length / 10));
+  const txPage = Math.min(ui.txPage, txTotalPages - 1);
+  const recent = sortedTx.slice(txPage * 10, txPage * 10 + 10);
 
   let statsBody = "";
   if (period === "daily") {
-    statsBody = renderDailyProgress(expense);
+    statsBody = renderDailyProgress(expense, ui.monthOffset);
   } else if (period === "weekly") {
     statsBody = `<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:4px;height:140px">` +
       bars.map((b) => `
@@ -318,7 +472,7 @@ function renderDashboard() {
           <div class="row-between" style="margin-bottom:4px">
             <h2 style="margin:0;font-weight:600;font-size:15px">Statistics</h2>
             <div class="pill-toggle">
-              ${["daily", "weekly", "monthly"].map((p) => `<button class="${period === p ? "active" : ""}" onclick="persist({viewPeriod:'${p}'}); setUi({monthOffset:0})">${p}</button>`).join("")}
+              ${["daily", "weekly", "monthly"].map((p) => `<button class="${period === p ? "active" : ""}" onclick="persist({viewPeriod:'${p}'}); setUi({monthOffset:0, txPage:0})">${p}</button>`).join("")}
             </div>
           </div>
           <div class="row-between" style="margin:12px 0 16px">
@@ -332,9 +486,9 @@ function renderDashboard() {
               ${periodLabel}
               <button class="btn-ghost" title="${ui.maskNumbers ? "Show numbers" : "Hide numbers"}" style="padding:0;display:flex;align-items:center;color:var(--text-soft)" onclick="setUi({maskNumbers:${!ui.maskNumbers}})">${ui.maskNumbers ? ICON.eyeOff : ICON.eye}</button>
             </p>
-            ${period === "monthly" ? `<div style="display:flex;gap:4px">
-              <button class="btn-ghost" style="width:24px;height:24px;border-radius:999px;background:var(--surface);padding:0;display:flex;align-items:center;justify-content:center" onclick="setUi({monthOffset:${ui.monthOffset - 1}})">‹</button>
-              <button class="btn-ghost" style="width:24px;height:24px;border-radius:999px;background:var(--surface);padding:0;display:flex;align-items:center;justify-content:center" onclick="setUi({monthOffset:${ui.monthOffset + 1}})">›</button>
+            ${period === "monthly" || period === "daily" ? `<div style="display:flex;gap:4px">
+              <button class="btn-ghost" style="width:24px;height:24px;border-radius:999px;background:var(--surface);padding:0;display:flex;align-items:center;justify-content:center" onclick="setUi({monthOffset:${ui.monthOffset - 1}, txPage:0})">‹</button>
+              <button class="btn-ghost" style="width:24px;height:24px;border-radius:999px;background:var(--surface);padding:0;display:flex;align-items:center;justify-content:center" onclick="setUi({monthOffset:${ui.monthOffset + 1}, txPage:0})">›</button>
             </div>` : ""}
           </div>
           ${statsBody}
@@ -354,10 +508,19 @@ function renderDashboard() {
               <div style="display:flex;align-items:center;gap:12px">
                 <span class="chip" style="background:#fff;border:1px solid ${colorFor(t.category, data.categories)};color:var(--text-soft)">${esc(t.category)}</span>
                 <span class="num" style="font-size:14px;font-weight:600;text-align:right;white-space:nowrap;flex-shrink:0;color:${t.type === "income" ? "var(--success)" : "var(--danger)"}">${t.type === "expense" ? "-" : "+"}${cur(t.amount)}</span>
-                <button class="btn-ghost" style="padding:2px" onclick="removeTx('${t.id}')">${ICON.x}</button>
+                <button class="btn-ghost" style="padding:2px" onclick="openEditTx('${t.id}')">${ICON.edit}</button>
               </div>
             </div>`).join("")}
+          ${sortedTx.length > 10 ? `
+          <div class="row-between" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+            <span style="font-size:11px;color:var(--text-soft)">${txPage * 10 + 1}–${Math.min(txPage * 10 + 10, sortedTx.length)} of ${sortedTx.length}</span>
+            <div style="display:flex;gap:4px">
+              <button class="btn-ghost" style="width:24px;height:24px;border-radius:999px;background:var(--surface);padding:0;display:flex;align-items:center;justify-content:center;opacity:${txPage <= 0 ? 0.35 : 1}" ${txPage <= 0 ? "disabled" : ""} onclick="setUi({txPage:${txPage - 1}})">‹</button>
+              <button class="btn-ghost" style="width:24px;height:24px;border-radius:999px;background:var(--surface);padding:0;display:flex;align-items:center;justify-content:center;opacity:${txPage >= txTotalPages - 1 ? 0.35 : 1}" ${txPage >= txTotalPages - 1 ? "disabled" : ""} onclick="setUi({txPage:${txPage + 1}})">›</button>
+            </div>
+          </div>` : ""}
         </div>
+        ${ui.editingTxId ? renderEditTxModal() : ""}
       </div>
 
       <div class="col">
@@ -395,16 +558,17 @@ function renderDashboard() {
   `;
 }
 
-function renderDailyProgress(expense) {
+function renderDailyProgress(expense, offset) {
   const budget = parseFloat(data.dailyBudget) || 0;
   const hasBudget = budget > 0;
   const pct = hasBudget ? Math.min((expense / budget) * 100, 100) : 0;
   const over = hasBudget && expense > budget;
+  const spentLabel = offset === 0 ? "spent today" : offset === -1 ? "spent yesterday" : "spent that day";
   return `
     <div class="row-between" style="align-items:flex-end">
       <div>
         <div class="num" style="font-size:28px;font-weight:800">${cur(expense)}</div>
-        <div style="font-size:12px;color:var(--text-soft);margin-top:4px">spent today</div>
+        <div style="font-size:12px;color:var(--text-soft);margin-top:4px">${spentLabel}</div>
       </div>
       <button class="btn btn-surface" onclick="setUi({dailyBudgetEditing:${!ui.dailyBudgetEditing}})">${hasBudget ? "✎ Edit daily limit" : "+ Set daily limit"}</button>
     </div>
@@ -451,11 +615,98 @@ function renderDonut(rows, total) {
       </div>
     </div>`;
 }
-function removeTx(id) { persist({ transactions: data.transactions.filter((t) => t.id !== id) }); }
+function removeTx(id) {
+  const t = data.transactions.find((x) => x.id === id);
+  if (t && t.transferId) { persist({ transactions: data.transactions.filter((x) => x.transferId !== t.transferId) }); return; }
+  persist({ transactions: data.transactions.filter((t) => t.id !== id) });
+}
+function deleteTxFromModal(id) { removeTx(id); ui.editingTxId = null; showToast("Entry deleted"); render(); }
+function openEditTx(id) {
+  const t = data.transactions.find((x) => x.id === id);
+  if (!t) return;
+  et_type = t.category === "Transfer" ? "transfer" : t.type;
+  ui.editingTxId = id; render();
+}
+function closeEditTx() { ui.editingTxId = null; render(); }
+function renderEditTxModal() {
+  const t = data.transactions.find((x) => x.id === ui.editingTxId);
+  if (!t) return "";
+  const pair = t.transferId ? data.transactions.find((x) => x.transferId === t.transferId && x.id !== t.id) : null;
+  const fromLeg = pair ? (t.type === "expense" ? t : pair) : t;
+  const toLeg = pair ? (t.type === "expense" ? pair : t) : null;
+  const isTransfer = et_type === "transfer";
+  return `
+  <div class="modal-backdrop" onclick="if(event.target===this) closeEditTx()">
+    <div class="modal-box">
+      <div class="row-between" style="margin-bottom:16px">
+        <h2 style="margin:0;font-weight:600;font-size:15px">Edit entry</h2>
+        <button class="btn-ghost" style="padding:2px" onclick="closeEditTx()">${ICON.x}</button>
+      </div>
+      ${t.transferId ? `<div style="font-size:11px;color:var(--text-soft);margin-bottom:12px">This is part of a linked transfer — editing or deleting updates both sides.</div>` : ""}
+      <form onsubmit="submitEditTx(event)">
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="toggle-surface">
+            <button type="button" class="${et_type === "expense" ? "active" : ""}" style="${et_type === "expense" ? "background:var(--danger-soft);color:var(--text)" : ""}" onclick="et_type='expense'; render()">Expense</button>
+            <button type="button" class="${et_type === "income" ? "active" : ""}" style="${et_type === "income" ? "background:var(--success-soft);color:var(--text)" : ""}" onclick="et_type='income'; render()">Income</button>
+            <button type="button" class="${isTransfer ? "active" : ""}" style="${isTransfer ? "background:var(--primary);color:var(--text)" : ""}" onclick="et_type='transfer'; render()">Transfer</button>
+          </div>
+          <div class="field">Amount (${data.currency})<input type="text" inputmode="numeric" id="et-amount" value="${fmtNum(fromLeg.amount)}" oninput="formatAmountInput(this)"></div>
+          <div class="field">Date<input type="date" id="et-date" value="${esc(fromLeg.date)}"></div>
+          ${isTransfer ? `
+          <div class="field">From account<select id="et-account">${data.accounts.map((a) => `<option ${a === fromLeg.account ? "selected" : ""}>${esc(a)}</option>`).join("")}</select></div>
+          <div class="field">To account<select id="et-to-account">${data.accounts.map((a) => `<option ${(toLeg ? a === toLeg.account : a === t.account) ? "selected" : ""}>${esc(a)}</option>`).join("")}</select></div>
+          ` : `
+          <div class="field">Account<select id="et-account">${data.accounts.map((a) => `<option ${a === t.account ? "selected" : ""}>${esc(a)}</option>`).join("")}</select></div>
+          <div class="field">Category<select id="et-category">${data.categories.filter((c) => c !== "Transfer").map((c) => `<option ${c === t.category ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></div>
+          `}
+          <div class="field">Note (optional)<input type="text" id="et-note" value="${esc(fromLeg.note || "")}"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:18px">
+          <button type="submit" class="btn btn-primary" style="flex:1;justify-content:center">Save changes</button>
+          <button type="button" class="btn btn-ghost" onclick="closeEditTx()">Cancel</button>
+        </div>
+        <button type="button" class="btn btn-danger-soft" style="width:100%;justify-content:center;margin-top:8px" onclick="deleteTxFromModal('${t.id}')">🗑 Delete entry</button>
+      </form>
+    </div>
+  </div>`;
+}
+function submitEditTx(e) {
+  e.preventDefault();
+  const amount = parseAmountInput(document.getElementById("et-amount").value);
+  const date = document.getElementById("et-date").value || todayStr();
+  const note = document.getElementById("et-note").value;
+  const t = data.transactions.find((x) => x.id === ui.editingTxId);
+  if (!t) return;
+  if (et_type === "transfer") {
+    const from = document.getElementById("et-account").value;
+    const to = document.getElementById("et-to-account").value;
+    if (!amount || amount <= 0 || !from || !to || from === to) { showToast("Fill in amount, and two different accounts"); return; }
+    const pair = t.transferId ? data.transactions.find((x) => x.transferId === t.transferId && x.id !== t.id) : null;
+    const linkId = t.transferId || uid();
+    const fromId = (pair && t.type === "income") ? pair.id : t.id;
+    const toId = (pair && t.type === "income") ? t.id : (pair ? pair.id : uid());
+    const rest = data.transactions.filter((x) => x.id !== fromId && x.id !== toId);
+    data.transactions = [
+      { id: fromId, date, amount, type: "expense", account: from, category: "Transfer", note: note || `Transfer to ${to}`, transferId: linkId },
+      { id: toId, date, amount, type: "income", account: to, category: "Transfer", note: note || `Transfer from ${from}`, transferId: linkId },
+      ...rest,
+    ];
+    save(); showToast("Transfer updated"); ui.editingTxId = null; render();
+    return;
+  }
+  const account = document.getElementById("et-account").value;
+  const category = document.getElementById("et-category").value;
+  if (!amount || amount <= 0 || !account || !category) { showToast("Fill in amount, account, and category"); return; }
+  const rest = t.transferId ? data.transactions.filter((x) => x.transferId !== t.transferId) : data.transactions.filter((x) => x.id !== t.id);
+  data.transactions = [{ id: t.id, amount, account, category, date, note, type: et_type }, ...rest];
+  save(); showToast("Entry updated"); ui.editingTxId = null; render();
+}
+let et_type = "expense";
 
 /* ============ Quick Add (embedded in Dashboard) ============ */
 let quickAddType = "expense";
 function renderQuickAddCard() {
+  const isTransfer = quickAddType === "transfer";
   return `
     <div class="card">
       <div class="row-between" style="margin-bottom:16px">
@@ -463,15 +714,21 @@ function renderQuickAddCard() {
         <div class="toggle-surface">
           <button type="button" class="${quickAddType === "expense" ? "active" : ""}" style="${quickAddType === "expense" ? "background:var(--danger-soft);color:var(--text)" : ""}" onclick="quickAddType='expense'; render()">Expense</button>
           <button type="button" class="${quickAddType === "income" ? "active" : ""}" style="${quickAddType === "income" ? "background:var(--success-soft);color:var(--text)" : ""}" onclick="quickAddType='income'; render()">Income</button>
+          <button type="button" class="${isTransfer ? "active" : ""}" style="${isTransfer ? "background:var(--primary);color:var(--text)" : ""}" onclick="quickAddType='transfer'; render()">Transfer</button>
         </div>
       </div>
       <form onsubmit="submitQuickAdd(event)">
         <div class="grid-2" style="gap:12px">
-          <div class="field">Amount (${data.currency})<input type="number" id="qa-amount" placeholder="0"></div>
+          <div class="field">Amount (${data.currency})<input type="text" inputmode="numeric" id="qa-amount" placeholder="0" oninput="formatAmountInput(this)"></div>
           <div class="field">Date<input type="date" id="qa-date" value="${todayStr()}"></div>
+          ${isTransfer ? `
+          <div class="field">From account<select id="qa-account">${data.accounts.map((a) => `<option>${esc(a)}</option>`).join("")}</select></div>
+          <div class="field">To account<select id="qa-to-account">${data.accounts.map((a) => `<option>${esc(a)}</option>`).join("")}</select></div>
+          ` : `
           <div class="field">Account<select id="qa-account">${data.accounts.map((a) => `<option>${esc(a)}</option>`).join("")}</select></div>
           <div class="field">Category<select id="qa-category">${data.categories.map((c) => `<option>${esc(c)}</option>`).join("")}</select></div>
-          <div class="field" style="grid-column:span 2">Note (optional)<input type="text" id="qa-note" placeholder="e.g. weekly groceries"></div>
+          `}
+          <div class="field" style="grid-column:span 2">Note (optional)<input type="text" id="qa-note" placeholder="${isTransfer ? "e.g. top up Shopeepay" : "e.g. weekly groceries"}"></div>
         </div>
         <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:16px">+ Add entry</button>
       </form>
@@ -481,11 +738,24 @@ function renderQuickAddCard() {
 }
 function submitQuickAdd(e) {
   e.preventDefault();
-  const amount = parseFloat(document.getElementById("qa-amount").value);
+  const amount = parseAmountInput(document.getElementById("qa-amount").value);
   const account = document.getElementById("qa-account").value;
-  const category = document.getElementById("qa-category").value;
   const date = document.getElementById("qa-date").value || todayStr();
   const note = document.getElementById("qa-note").value;
+  if (quickAddType === "transfer") {
+    const toAccount = document.getElementById("qa-to-account").value;
+    if (!amount || amount <= 0 || !account || !toAccount) { showToast("Fill in amount, from, and to account"); return; }
+    if (account === toAccount) { showToast("From and to account must be different"); return; }
+    const linkId = uid();
+    data.transactions = [
+      { id: uid(), date, amount, type: "expense", account, category: "Transfer", note: note || `Transfer to ${toAccount}`, transferId: linkId },
+      { id: uid(), date, amount, type: "income", account: toAccount, category: "Transfer", note: note || `Transfer from ${account}`, transferId: linkId },
+      ...data.transactions,
+    ];
+    save(); showToast("Transfer recorded"); ui.quickAddOpen = false; render();
+    return;
+  }
+  const category = document.getElementById("qa-category").value;
   if (!amount || amount <= 0 || !account || !category) { showToast("Fill in amount, account, and category"); return; }
   data.transactions = [{ id: uid(), date, amount, type: quickAddType, account, category, note }, ...data.transactions];
   save(); showToast("Entry added"); ui.quickAddOpen = false; render();
@@ -697,6 +967,17 @@ function renderSettings() {
     </div>
     <h2 style="font-size:13px;font-weight:600;color:var(--text-soft-on-bg);margin:24px 0 8px">CURRENCY SYMBOL</h2>
     <input value="${esc(data.currency)}" onchange="persist({currency:this.value})" style="width:160px;padding:8px 12px;border-radius:12px;border:1px solid var(--border);font-size:14px">
+    <h2 style="font-size:13px;font-weight:600;color:var(--text-soft-on-bg);margin:24px 0 8px">INVESTMENT KEYWORDS</h2>
+    <div class="card">
+      <p style="font-size:12px;color:var(--text-soft);margin:0 0 12px">Words to watch for in a transaction's note or category — e.g. "Bibit", "Dompet X", "Saham". Used by the Wealth dashboard to auto-detect additions.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        ${(data.wealthKeywords || []).map((k) => `<span class="chip"><span class="dot" style="background:${keywordColor(k, data.wealthKeywords || [])}"></span>${esc(k)}<button onclick="removeWealthKeyword('${esc(k)}')">${ICON.x}</button></span>`).join("") || `<span style="font-size:14px;color:var(--text-soft)">No keywords yet.</span>`}
+      </div>
+      <div style="display:flex;gap:8px">
+        <input id="new-keyword" placeholder="e.g. Dompet X" style="flex:1;padding:8px 12px;border-radius:12px;border:1px solid var(--border);font-size:14px">
+        <button class="btn btn-primary" onclick="addWealthKeyword()">Add</button>
+      </div>
+    </div>
     <div style="margin-top:24px">
       <button class="btn btn-outline" onclick="exportCsv()">⬇ Export all transactions as CSV</button>
     </div>
@@ -754,7 +1035,7 @@ function renderWealth() {
         <h2 style="margin:0 0 12px;font-size:14px;font-weight:600">Record a cash out</h2>
         <div class="grid-2" style="gap:12px">
           <div class="field">Instrument<select id="co-keyword">${keywords.map((k) => `<option>${esc(k)}</option>`).join("")}</select></div>
-          <div class="field">Amount (${data.currency})<input type="number" id="co-amount" placeholder="0"></div>
+          <div class="field">Amount (${data.currency})<input type="text" inputmode="numeric" id="co-amount" placeholder="0" oninput="formatAmountInput(this)"></div>
           <div class="field">Date<input type="date" id="co-date" value="${todayStr()}"></div>
           <div class="field">Deposit to account (optional)<select id="co-account"><option value="">Don't log as income</option>${data.accounts.map((a) => `<option>${esc(a)}</option>`).join("")}</select></div>
           <div class="field" style="grid-column:span 2">Note (optional)<input type="text" id="co-note" placeholder="e.g. partial withdrawal"></div>
@@ -765,7 +1046,7 @@ function renderWealth() {
         </div>
       </form>` : ""}
 
-    <div class="grid-dash" style="grid-template-columns:1.4fr 1fr">
+    <div class="grid-dash" style="grid-template-columns:1fr">
       <div class="col">
         <div class="card">
           <div class="row-between">
@@ -784,7 +1065,7 @@ function renderWealth() {
               <p style="font-size:12px;color:var(--text-soft);margin:0 0 10px">Since this isn't connected to Bibit, GoTrade, or your other apps, tell it what each instrument is actually worth right now.</p>
               <div class="grid-2" style="gap:12px">
                 <div class="field">Instrument<select id="iv-keyword">${keywords.length === 0 ? `<option value="">Add a keyword first</option>` : keywords.map((k) => `<option>${esc(k)}</option>`).join("")}</select></div>
-                <div class="field">Current value (${data.currency})<input type="number" id="iv-value" placeholder="e.g. 500000"></div>
+                <div class="field">Current value (${data.currency})<input type="text" inputmode="numeric" id="iv-value" placeholder="e.g. 500000" oninput="formatAmountInput(this)"></div>
               </div>
               <div style="display:flex;gap:8px;margin-top:14px">
                 <button type="submit" class="btn btn-primary">Save value</button>
@@ -841,26 +1122,14 @@ function renderWealth() {
             </div>`).join("")}
         </div>
       </div>
-
-      <div class="card" style="height:fit-content">
-        <h2 style="margin:0 0 4px;font-size:15px;font-weight:600">Investment Keywords</h2>
-        <p style="font-size:12px;color:var(--text-soft);margin:0 0 12px">Words to watch for in a transaction's note or category — e.g. "Bibit", "Dompet X", "Saham".</p>
-        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
-          ${keywords.map((k) => `<span class="chip"><span class="dot" style="background:${keywordColor(k, keywords)}"></span>${esc(k)}<button onclick="removeWealthKeyword('${esc(k)}')">${ICON.x}</button></span>`).join("") || `<span style="font-size:14px;color:var(--text-soft)">No keywords yet.</span>`}
-        </div>
-        <div style="display:flex;gap:8px">
-          <input id="new-keyword" placeholder="e.g. Dompet X" style="flex:1;padding:8px 12px;border-radius:12px;border:1px solid var(--border);font-size:14px">
-          <button class="btn btn-primary" onclick="addWealthKeyword()">Add</button>
-        </div>
-      </div>
     </div>
   `;
 }
 function submitInstrumentUpdate(e) {
   e.preventDefault();
   const keyword = document.getElementById("iv-keyword").value;
-  const entered = parseFloat(document.getElementById("iv-value").value);
-  if (!keyword || isNaN(entered)) { showToast("Choose an instrument and enter a value"); return; }
+  const entered = parseAmountInput(document.getElementById("iv-value").value);
+  if (!keyword || !entered) { showToast("Choose an instrument and enter a value"); return; }
   const newBase = entered - keywordNet(keyword);
   const map = { ...(data.wealthInstrumentBase || {}), [keyword]: newBase };
   persist({ wealthInstrumentBase: map });
@@ -871,7 +1140,7 @@ function addWealthKeyword() { const v = document.getElementById("new-keyword").v
 function removeWealthKeyword(k) { persist({ wealthKeywords: (data.wealthKeywords || []).filter((x) => x !== k) }); }
 function submitCashout(e) {
   e.preventDefault();
-  const keyword = document.getElementById("co-keyword").value, amount = parseFloat(document.getElementById("co-amount").value);
+  const keyword = document.getElementById("co-keyword").value, amount = parseAmountInput(document.getElementById("co-amount").value);
   const date = document.getElementById("co-date").value || todayStr(), account = document.getElementById("co-account").value, note = document.getElementById("co-note").value;
   if (!amount || amount <= 0 || !keyword) { showToast("Choose an instrument and amount"); return; }
   const adj = { id: uid(), date, keyword, amount, note };
@@ -881,7 +1150,7 @@ function submitCashout(e) {
 }
 
 /* ============ Init ============ */
-render();
+initApp();
 </script>
 </body>
 </html>
